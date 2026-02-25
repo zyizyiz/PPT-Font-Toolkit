@@ -1,0 +1,42 @@
+{
+  "name": "font-metrics",
+  "version": "1.0.0",
+  "description": "中文优先的字体 Metrics 提取 CLI / Chinese-first font metrics CLI",
+  "homepage": "https://github.com/zyizyiz/Font-Metrics#readme",
+  "bugs": {
+    "url": "https://github.com/zyizyiz/Font-Metrics/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zyizyiz/Font-Metrics.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "./font-metrics.mjs",
+  "bin": {
+    "font-metrics": "./font-metrics.mjs"
+  },
+  "files": [
+    "font-metrics.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "font",
+    "metrics",
+    "typography",
+    "ppt",
+    "line-height",
+    "cli",
+    "truetype",
+    "opentype"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "scripts": {
+    "start": "node font-metrics.mjs --help",
+    "test": "echo \"No tests specified\""
+  }
+}
