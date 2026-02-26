@@ -41,6 +41,8 @@ node font-metrics.mjs --dir <目录路径>
 node font-metrics.mjs --scan
 node font-metrics.mjs --scan --filter <正则关键字>
 node font-metrics.mjs --scan --json
+node font-metrics.mjs --scan --json --map
+node font-metrics.mjs --scan --json --save <文件路径>
 node font-metrics.mjs --scan --code
 ```
 
@@ -59,7 +61,13 @@ node font-metrics.mjs --dir ./fonts
 # 4) 输出 JSON（方便程序消费）
 node font-metrics.mjs --scan --json
 
-# 5) 输出可直接使用的映射代码
+# 5) 输出以 familyName 为 key 的 JSON Map
+node font-metrics.mjs --scan --json --map
+
+# 6) 输出 JSON 并保存到文件
+node font-metrics.mjs --scan --json --save fonts.json
+
+# 7) 输出可直接使用的映射代码
 node font-metrics.mjs --scan --code
 ```
 
@@ -122,6 +130,8 @@ node font-metrics.mjs --dir <directory>
 node font-metrics.mjs --scan
 node font-metrics.mjs --scan --filter <regex>
 node font-metrics.mjs --scan --json
+node font-metrics.mjs --scan --json --map
+node font-metrics.mjs --scan --json --save <file-path>
 node font-metrics.mjs --scan --code
 ```
 
@@ -132,6 +142,8 @@ node font-metrics.mjs /Library/Fonts/Arial.ttf
 node font-metrics.mjs --scan --filter "Arial|Times|Courier"
 node font-metrics.mjs --dir ./fonts
 node font-metrics.mjs --scan --json
+node font-metrics.mjs --scan --json --map
+node font-metrics.mjs --scan --json --save fonts.json
 node font-metrics.mjs --scan --code
 ```
 

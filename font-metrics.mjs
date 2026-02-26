@@ -11,10 +11,12 @@
  *   2. 指定字体文件：  node font-metrics.mjs /path/to/font.ttf
  *   3. 指定目录扫描：  node font-metrics.mjs --dir /path/to/fonts
  *   4. 输出 JSON：     node font-metrics.mjs --scan --json
- *   5. 搜索字体名称：  node font-metrics.mjs --scan --filter 微软
+ *   5. JSON Map模式：  node font-metrics.mjs --scan --json --map
+ *   6. 保存到文件：    node font-metrics.mjs --scan --json --save output.json
+ *   7. 搜索字体名称：  node font-metrics.mjs --scan --filter 微软
  */
 
-import { readFileSync, readdirSync, statSync, existsSync } from 'fs'
+import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'fs'
 import { join, extname, resolve } from 'path'
 import { platform } from 'os'
 
@@ -120,15 +122,16 @@ function parseSingleFont(view, startOffset) {
     }
 
     // 提取字体名称
-    let familyName = ''
+    let names = { familyName: '', familyNameEn: '' }
     if (nameOffset >= 0) {
-      familyName = extractFontName(view, nameOffset, nameLength)
+      names = extractFontName(view, nameOffset, nameLength)
     }
 
     const lineRatio = (usWinAscent + usWinDescent) / unitsPerEm
 
     return {
-      familyName,
+      familyName: names.familyName,
+      familyNameEn: names.familyNameEn,
       usWinAscent,
       usWinDescent,
       unitsPerEm,
@@ -140,14 +143,55 @@ function parseSingleFont(view, startOffset) {
 }
 
 /**
+ * 解码 Mac 平台 GB2312 (encodingID=25) 编码的字节为中文字符串
+ */
+function decodeMacChineseGB(view, start, length) {
+  // GB2312 双字节编码：高字节 0xA1-0xF7，低字节 0xA1-0xFE
+  // 使用 TextDecoder 解码
+  const bytes = new Uint8Array(length)
+  for (let i = 0; i < length; i++) {
+    bytes[i] = view.getUint8(start + i)
+  }
+  try {
+    return new TextDecoder('gb18030').decode(bytes)
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * 解码 Mac 平台 Big5 (encodingID=2) 编码的字节为中文字符串
+ */
+function decodeMacChineseBig5(view, start, length) {
+  const bytes = new Uint8Array(length)
+  for (let i = 0; i < length; i++) {
+    bytes[i] = view.getUint8(start + i)
+  }
+  try {
+    return new TextDecoder('big5').decode(bytes)
+  } catch {
+    return ''
+  }
+}
+
+/**
  * 从 name 表提取字体族名
+ * 返回 { familyName, familyNameEn }
+ * familyName: 优先简体中文 > 繁体中文 > 英文
+ * familyNameEn: 英文名
  */
 function extractFontName(view, nameOffset, nameLength) {
   try {
     const count = view.getUint16(nameOffset + 2)
     const stringOffset = nameOffset + view.getUint16(nameOffset + 4)
     
-    let familyName = ''
+    // 收集候选名称
+    let nameZhCN = ''     // 简体中文 (Windows platform, langID=2052)
+    let nameZhTW = ''     // 繁体中文 (Windows platform, langID=1028)
+    let nameEn = ''       // 英文 (Windows platform, langID=1033)
+    let nameMacEn = ''    // Mac 英文
+    let nameMacZhCN = ''  // Mac 简体中文 (encodingID=25)
+    let nameMacZhTW = ''  // Mac 繁体中文 (encodingID=2)
     
     for (let i = 0; i < count; i++) {
       const recordOffset = nameOffset + 6 + i * 12
@@ -158,38 +202,54 @@ function extractFontName(view, nameOffset, nameLength) {
       const length = view.getUint16(recordOffset + 8)
       const offset = view.getUint16(recordOffset + 10)
 
-      // nameID 1 = Font Family name, nameID 4 = Full font name
-      if (nameID === 1 || nameID === 4) {
-        const strStart = stringOffset + offset
-        let name = ''
+      // nameID 1 = Font Family name, nameID 16 = Typographic Family name
+      if (nameID !== 1 && nameID !== 16) continue
 
-        if (platformID === 3 || platformID === 0) {
-          // Windows/Unicode: UTF-16BE
-          for (let j = 0; j < length; j += 2) {
-            name += String.fromCharCode(view.getUint16(strStart + j))
+      const strStart = stringOffset + offset
+      let name = ''
+
+      if (platformID === 3 || platformID === 0) {
+        // Windows/Unicode: UTF-16BE
+        for (let j = 0; j < length; j += 2) {
+          name += String.fromCharCode(view.getUint16(strStart + j))
+        }
+        if (!name) continue
+        if (nameID === 1 || nameID === 16) {
+          if (languageID === 2052 && !nameZhCN) {
+            nameZhCN = name
+          } else if (languageID === 1028 && !nameZhTW) {
+            nameZhTW = name
+          } else if (languageID === 1033 && !nameEn) {
+            nameEn = name
           }
-        } else if (platformID === 1) {
-          // Mac: ASCII/Latin
+        }
+      } else if (platformID === 1) {
+        // Mac platform
+        if (encodingID === 25 && nameID === 1) {
+          // Mac 简体中文 (GB2312)
+          name = decodeMacChineseGB(view, strStart, length)
+          if (name && !nameMacZhCN) nameMacZhCN = name
+        } else if (encodingID === 2 && nameID === 1) {
+          // Mac 繁体中文 (Big5)
+          name = decodeMacChineseBig5(view, strStart, length)
+          if (name && !nameMacZhTW) nameMacZhTW = name
+        } else if (encodingID === 0 && nameID === 1) {
+          // Mac Roman (ASCII/Latin)
           for (let j = 0; j < length; j++) {
             name += String.fromCharCode(view.getUint8(strStart + j))
           }
-        }
-
-        if (name && nameID === 1) {
-          // 优先用中文名（platformID=3, languageID=2052 是简体中文）
-          if (languageID === 2052 || languageID === 1028) {
-            return name
-          }
-          if (!familyName) {
-            familyName = name
-          }
+          if (name && !nameMacEn) nameMacEn = name
         }
       }
     }
 
-    return familyName
+    // 优先级：简体中文 > 繁体中文 > Mac简中 > Mac繁中 > 英文 > Mac英文
+    const familyName = nameZhCN || nameZhTW || nameMacZhCN || nameMacZhTW || nameEn || nameMacEn || ''
+    const familyNameEn = nameEn || nameMacEn || ''
+    
+    return { familyName, familyNameEn }
   } catch (e) {
-    return ''
+    return { familyName: '', familyNameEn: '' }
   }
 }
 
@@ -266,7 +326,9 @@ function printUsage() {
   node font-metrics.mjs --dir <目录路径>        扫描指定目录
   node font-metrics.mjs --scan                  扫描系统字体
   node font-metrics.mjs --scan --filter <关键字> 按名称过滤
-  node font-metrics.mjs --scan --json           以 JSON 格式输出
+  node font-metrics.mjs --scan --json           以 JSON 格式输出（数组）
+  node font-metrics.mjs --scan --json --map     以 JSON 格式输出（familyName 为 key 的 Map）
+  node font-metrics.mjs --scan --json --save <文件路径>  输出 JSON 并保存到文件
   node font-metrics.mjs --scan --code           输出可直接使用的代码
 
 示例:
@@ -286,7 +348,10 @@ function main() {
 
   const isJson = args.includes('--json')
   const isCode = args.includes('--code')
+  const isMap = args.includes('--map')
   const isScan = args.includes('--scan')
+  const saveIdx = args.indexOf('--save')
+  const savePath = saveIdx >= 0 ? args[saveIdx + 1] : null
   const filterIdx = args.indexOf('--filter')
   const filterPattern = filterIdx >= 0 ? args[filterIdx + 1] : null
   const dirIdx = args.indexOf('--dir')
@@ -326,11 +391,13 @@ function main() {
     }
   }
 
-  // 按名称过滤
+  // 按名称过滤（同时匹配中文名、英文名、文件路径）
   let filtered = allResults
   if (filterPattern) {
     const regex = new RegExp(filterPattern, 'i')
-    filtered = allResults.filter(r => regex.test(r.familyName) || regex.test(r.path))
+    filtered = allResults.filter(r => 
+      regex.test(r.familyName) || regex.test(r.familyNameEn) || regex.test(r.path)
+    )
   }
 
   // 去重（同名字体保留第一个）
@@ -359,24 +426,65 @@ function main() {
     console.log('const FONT_LINE_RATIO: Record<string, number> = {')
     for (const r of filtered) {
       if (r.familyName) {
-        console.log(`  '${r.familyName}': ${r.lineRatio},  // ascent=${r.usWinAscent} descent=${r.usWinDescent} em=${r.unitsPerEm}`)
+        const enInfo = r.familyNameEn && r.familyNameEn !== r.familyName ? ` [${r.familyNameEn}]` : ''
+        console.log(`  '${r.familyName}': ${r.lineRatio},  // ascent=${r.usWinAscent} descent=${r.usWinDescent} em=${r.unitsPerEm}${enInfo}`)
       }
     }
     console.log('}')
     console.log('')
     console.log('const DEFAULT_LINE_RATIO = 1.2')
   } else if (isJson) {
-    const output = filtered.map(r => ({
-      familyName: r.familyName,
-      usWinAscent: r.usWinAscent,
-      usWinDescent: r.usWinDescent,
-      unitsPerEm: r.unitsPerEm,
-      lineRatio: r.lineRatio,
-    }))
-    console.log(JSON.stringify(output, null, 2))
+    let output
+    if (isMap) {
+      // 以 familyName 为 key 生成 Map 对象
+      output = {}
+      for (const r of filtered) {
+        if (r.familyName) {
+          const entry = {
+            usWinAscent: r.usWinAscent,
+            usWinDescent: r.usWinDescent,
+            unitsPerEm: r.unitsPerEm,
+            lineRatio: r.lineRatio,
+          }
+          if (r.familyNameEn && r.familyNameEn !== r.familyName) {
+            entry.familyNameEn = r.familyNameEn
+          }
+          output[r.familyName] = entry
+        }
+      }
+    } else {
+      output = filtered.map(r => {
+        const entry = {
+          familyName: r.familyName,
+          usWinAscent: r.usWinAscent,
+          usWinDescent: r.usWinDescent,
+          unitsPerEm: r.unitsPerEm,
+          lineRatio: r.lineRatio,
+        }
+        if (r.familyNameEn && r.familyNameEn !== r.familyName) {
+          entry.familyNameEn = r.familyNameEn
+        }
+        return entry
+      })
+    }
+    const jsonStr = JSON.stringify(output, null, 2)
+    if (savePath) {
+      const absPath = resolve(savePath)
+      writeFileSync(absPath, jsonStr + '\n', 'utf-8')
+      console.error(`已保存到: ${absPath}`)
+    } else {
+      console.log(jsonStr)
+    }
   } else {
     // 表格输出
-    const maxName = Math.max(12, ...filtered.map(r => r.familyName.length))
+    // 生成显示名称，包含英文名（如有）
+    const displayNames = filtered.map(r => {
+      if (r.familyNameEn && r.familyNameEn !== r.familyName) {
+        return `${r.familyName} (${r.familyNameEn})`
+      }
+      return r.familyName
+    })
+    const maxName = Math.max(12, ...displayNames.map(n => n.length))
     const header = [
       '字体名称'.padEnd(maxName),
       'Ascent'.padStart(8),
@@ -388,9 +496,10 @@ function main() {
     console.log(header)
     console.log('-'.repeat(header.length))
     
-    for (const r of filtered) {
+    for (let i = 0; i < filtered.length; i++) {
+      const r = filtered[i]
       console.log([
-        r.familyName.padEnd(maxName),
+        displayNames[i].padEnd(maxName),
         String(r.usWinAscent).padStart(8),
         String(r.usWinDescent).padStart(8),
         String(r.unitsPerEm).padStart(8),
