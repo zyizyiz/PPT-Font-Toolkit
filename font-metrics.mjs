@@ -8,13 +8,13 @@
  * 
  * 用法：
  *   1. 扫描系统字体：  node ppt-font-toolkit.mjs metrics --scan
- *   2. 指定字体文件：  node ppt-font-metrics /path/to/font.ttf
+ *   2. 指定字体文件：  node font-metrics.mjs /path/to/font.ttf
  *   3. 指定目录扫描：  node ppt-font-toolkit.mjs metrics --dir /path/to/fonts
- *   4. 输出 JSON：     node ppt-font-metrics --scan --json
- *   5. JSON Map模式：  node ppt-font-metrics --scan --json --map
- *   6. 保存到文件：    node ppt-font-metrics --scan --json --save output.json
+ *   4. 输出 JSON：     node font-metrics.mjs --scan --json
+ *   5. JSON Map模式：  node font-metrics.mjs --scan --json --map
+ *   6. 保存到文件：    node font-metrics.mjs --scan --json --save output.json
  *   7. 搜索字体名称：  node ppt-font-toolkit.mjs metrics --scan --filter 微软
- *   8. 兼容旧命令：    node font-metrics.mjs --scan
+ *   8. 安装后命令：    ppt-font-metrics --scan
  */
 
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'fs'
@@ -328,8 +328,10 @@ PPT-Font-Toolkit — Font Metrics
   node ppt-font-toolkit.mjs metrics <字体文件路径>
   node ppt-font-toolkit.mjs metrics --dir <目录路径>
   node ppt-font-toolkit.mjs metrics --scan
-  node ppt-font-metrics <字体文件路径>
-  node font-metrics.mjs <字体文件路径>   (兼容旧脚本名)
+  node font-metrics.mjs <字体文件路径>
+  node font-metrics.mjs --dir <目录路径>
+  node font-metrics.mjs --scan           (兼容旧脚本名)
+  ppt-font-metrics <字体文件路径>        (安装后可用)
 
 参数示例:
   --scan                  扫描系统字体
@@ -341,9 +343,9 @@ PPT-Font-Toolkit — Font Metrics
 
 示例:
   node ppt-font-toolkit.mjs metrics /Library/Fonts/msyh.ttf
-  node ppt-font-metrics --scan --filter "微软|Arial|Times|宋体|Courier"
-  node ppt-font-metrics --scan --code
+  node font-metrics.mjs --scan --filter "微软|Arial|Times|宋体|Courier"
   node font-metrics.mjs --scan --code
+  ppt-font-metrics --scan --json        (安装后可用)
 `)
 }
 

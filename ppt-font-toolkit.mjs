@@ -15,11 +15,13 @@ PPT-Font-Toolkit
   node ppt-font-toolkit.mjs recover <source ...>
   node ppt-font-toolkit.mjs metrics <args ...>
   node ppt-font-toolkit.mjs <source ...>
+  ppt-font-toolkit recover <source ...>   (安装后可用)
+  ppt-font-toolkit metrics <args ...>     (安装后可用)
 
 说明:
   - 省略子命令时，默认走 recover
-  - recover 对应: ppt-font-recover.mjs
-  - metrics 对应: ppt-font-metrics / font-metrics.mjs（兼容）
+  - recover 对应: node ppt-font-recover.mjs / ppt-font-recover（安装后可用）
+  - metrics 对应: node font-metrics.mjs / ppt-font-metrics（安装后可用）
 `)
 }
 

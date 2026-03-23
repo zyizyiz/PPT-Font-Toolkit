@@ -53,7 +53,7 @@ node ppt-font-toolkit.mjs --help
 node ppt-font-recover.mjs --help
 
 # 查看 metrics 工具帮助
-node ppt-font-metrics --help
+node font-metrics.mjs --help
 ```
 
 ---
@@ -207,13 +207,14 @@ node ppt-font-recover.mjs ./demo.pptx --list
 node ppt-font-toolkit.mjs metrics <字体文件路径>
 node ppt-font-toolkit.mjs metrics --dir <目录路径>
 node ppt-font-toolkit.mjs metrics --scan
-node ppt-font-metrics <字体文件路径>
-node font-metrics.mjs <字体文件路径>   # 兼容旧脚本名
-node ppt-font-metrics --scan --filter <正则关键字>
-node ppt-font-metrics --scan --json
-node ppt-font-metrics --scan --json --map
-node ppt-font-metrics --scan --json --save <文件路径>
-node ppt-font-metrics --scan --code
+node font-metrics.mjs <字体文件路径>
+node font-metrics.mjs --dir <目录路径>   # 兼容旧脚本名
+node font-metrics.mjs --scan             # 兼容旧脚本名
+node font-metrics.mjs --scan --filter <正则关键字>
+node font-metrics.mjs --scan --json
+node font-metrics.mjs --scan --json --map
+node font-metrics.mjs --scan --json --save <文件路径>
+node font-metrics.mjs --scan --code
 ```
 
 ### 常用示例
@@ -223,22 +224,22 @@ node ppt-font-metrics --scan --code
 node ppt-font-toolkit.mjs metrics /Library/Fonts/Arial.ttf
 
 # 2) 扫描系统字体并筛选
-node ppt-font-metrics --scan --filter "微软雅黑|Arial|Times|宋体|Courier"
+node font-metrics.mjs --scan --filter "微软雅黑|Arial|Times|宋体|Courier"
 
 # 3) 扫描指定目录
-node ppt-font-metrics --dir ./fonts
+node font-metrics.mjs --dir ./fonts
 
 # 4) 输出 JSON
-node ppt-font-metrics --scan --json
+node font-metrics.mjs --scan --json
 
 # 5) 输出 familyName => metrics 的 Map
-node ppt-font-metrics --scan --json --map
+node font-metrics.mjs --scan --json --map
 
 # 6) 保存到文件
-node ppt-font-metrics --scan --json --save fonts.json
+node font-metrics.mjs --scan --json --save fonts.json
 
 # 7) 输出可直接粘贴的代码
-node ppt-font-metrics --scan --code
+node font-metrics.mjs --scan --code
 ```
 
 ### 输出字段说明
@@ -259,6 +260,8 @@ PPT行高(px) = fontSize(pt) × lineRatio × spcPct × 96/72
 ---
 
 ## 总入口与命令别名
+
+以下命令别名在执行 `npm link` 或全局安装后可直接使用；在仓库目录内直接运行时，请继续使用 `node *.mjs`。
 
 ### 新命令
 
@@ -293,7 +296,7 @@ node odttf-decrypt.mjs ./demo.pptx
 
 ## License
 
-项目主许可证：`ISC`
+项目主许可证：`Apache-2.0`（见根目录 `LICENSE`）
 
 其中 `vendor/libeot` 保持其上游许可证与声明文件。
 
@@ -301,14 +304,41 @@ node odttf-decrypt.mjs ./demo.pptx
 
 ## English
 
-`PPT-Font-Toolkit` is a Chinese-first Node.js CLI for:
+`PPT-Font-Toolkit` is a Chinese-first Node.js CLI for two tasks:
 
 - recovering embedded fonts from `Microsoft Office` and `WPS / Kingsoft Presentation`
 - extracting font metrics from normal font files
 
+### Features
+
+- Auto-detect `Office ODTTF` and `WPS / Kingsoft EOT / MTX`
+- Accept `.pptx`, unpacked PPT directories, single `.fntdata`, or recursive folders
+- Support `--list` to inspect embedded fonts before recovery
+- Keep the original font metrics extractor in the same toolkit
+
+### Requirements
+
+- Node.js 16+ (`18+` recommended)
+- For `WPS` embedded fonts, the first run needs a local C compiler: `cc`, `clang`, or `gcc`
+- For direct `.pptx` input, the system needs an unzip command:
+  - macOS / Linux: `unzip`
+  - Windows: `PowerShell Expand-Archive`
+
+### Quick start
+
+```bash
+git clone https://github.com/zyizyiz/PPT-Font-Toolkit.git
+cd PPT-Font-Toolkit
+
+node ppt-font-toolkit.mjs --help
+node ppt-font-recover.mjs --help
+node font-metrics.mjs --help
+```
+
 ### Recover embedded fonts
 
 ```bash
+node ppt-font-toolkit.mjs ./demo.pptx
 node ppt-font-recover.mjs ./demo.pptx
 node ppt-font-recover.mjs ./demo-unzipped --list
 node ppt-font-recover.mjs ./downloads --output-dir ./recovered-fonts
@@ -323,6 +353,17 @@ It auto-detects:
 
 ```bash
 node ppt-font-toolkit.mjs metrics /Library/Fonts/Arial.ttf
-node ppt-font-metrics --scan --json
+node font-metrics.mjs --scan --json
 ```
 
+If you install the package with `npm link` or a global npm install, you can also use these bin names directly:
+
+- `ppt-font-toolkit`
+- `ppt-font-recover`
+- `ppt-font-metrics`
+
+### License
+
+Main project license: `Apache-2.0` (see `LICENSE`).
+
+`vendor/libeot` keeps its upstream license and patent notices.

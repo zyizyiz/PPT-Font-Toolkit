@@ -10,7 +10,7 @@
     "type": "git",
     "url": "git+https://github.com/zyizyiz/PPT-Font-Toolkit.git"
   },
-  "license": "ISC",
+  "license": "Apache-2.0",
   "author": "",
   "type": "module",
   "main": "./ppt-font-toolkit.mjs",
