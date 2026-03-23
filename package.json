@@ -1,30 +1,45 @@
 {
-  "name": "font-metrics",
-  "version": "1.0.0",
-  "description": "中文优先的字体 Metrics 提取 CLI / Chinese-first font metrics CLI",
-  "homepage": "https://github.com/zyizyiz/Font-Metrics#readme",
+  "name": "ppt-font-toolkit",
+  "version": "1.1.0",
+  "description": "中文优先的 PPT 字体工具箱：内嵌字体恢复 + 字体 Metrics 提取 / Chinese-first PPT font toolkit",
+  "homepage": "https://github.com/zyizyiz/PPT-Font-Toolkit#readme",
   "bugs": {
-    "url": "https://github.com/zyizyiz/Font-Metrics/issues"
+    "url": "https://github.com/zyizyiz/PPT-Font-Toolkit/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zyizyiz/Font-Metrics.git"
+    "url": "git+https://github.com/zyizyiz/PPT-Font-Toolkit.git"
   },
   "license": "ISC",
   "author": "",
   "type": "module",
-  "main": "./font-metrics.mjs",
+  "main": "./ppt-font-toolkit.mjs",
   "bin": {
-    "font-metrics": "./font-metrics.mjs"
+    "ppt-font-toolkit": "./ppt-font-toolkit.mjs",
+    "ppt-font-recover": "./ppt-font-recover.mjs",
+    "ppt-font-metrics": "./font-metrics.mjs",
+    "font-metrics": "./font-metrics.mjs",
+    "font-odttf-decrypt": "./odttf-decrypt.mjs"
   },
   "files": [
+    "ppt-font-toolkit.mjs",
+    "ppt-font-recover.mjs",
     "font-metrics.mjs",
+    "odttf-decrypt.mjs",
+    "vendor/libeot",
     "README.md",
     "LICENSE"
   ],
   "keywords": [
     "font",
+    "ppt-font",
     "metrics",
+    "embedded-font",
+    "odttf",
+    "eot",
+    "wps",
+    "office",
+    "powerpoint",
     "typography",
     "ppt",
     "line-height",
@@ -36,7 +51,10 @@
     "node": ">=16"
   },
   "scripts": {
-    "start": "node font-metrics.mjs --help",
+    "start": "node ppt-font-toolkit.mjs --help",
+    "recover:help": "node ppt-font-recover.mjs --help",
+    "decrypt:help": "node odttf-decrypt.mjs --help",
+    "metrics:help": "node ppt-font-toolkit.mjs metrics --help",
     "test": "echo \"No tests specified\""
   }
 }

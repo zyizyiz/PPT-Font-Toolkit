@@ -1,19 +1,20 @@
 #!/usr/bin/env node
 
 /**
- * 字体 Metrics 提取工具
+ * PPT-Font-Toolkit / Font Metrics
  * 
  * 从字体文件中提取 usWinAscent、usWinDescent、unitsPerEm，
  * 计算 PPT 单倍行距比率 (usWinAscent + usWinDescent) / unitsPerEm
  * 
  * 用法：
- *   1. 扫描系统字体：  node font-metrics.mjs --scan
- *   2. 指定字体文件：  node font-metrics.mjs /path/to/font.ttf
- *   3. 指定目录扫描：  node font-metrics.mjs --dir /path/to/fonts
- *   4. 输出 JSON：     node font-metrics.mjs --scan --json
- *   5. JSON Map模式：  node font-metrics.mjs --scan --json --map
- *   6. 保存到文件：    node font-metrics.mjs --scan --json --save output.json
- *   7. 搜索字体名称：  node font-metrics.mjs --scan --filter 微软
+ *   1. 扫描系统字体：  node ppt-font-toolkit.mjs metrics --scan
+ *   2. 指定字体文件：  node ppt-font-metrics /path/to/font.ttf
+ *   3. 指定目录扫描：  node ppt-font-toolkit.mjs metrics --dir /path/to/fonts
+ *   4. 输出 JSON：     node ppt-font-metrics --scan --json
+ *   5. JSON Map模式：  node ppt-font-metrics --scan --json --map
+ *   6. 保存到文件：    node ppt-font-metrics --scan --json --save output.json
+ *   7. 搜索字体名称：  node ppt-font-toolkit.mjs metrics --scan --filter 微软
+ *   8. 兼容旧命令：    node font-metrics.mjs --scan
  */
 
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'fs'
@@ -319,21 +320,29 @@ function scanFontFiles(dir) {
 
 function printUsage() {
   console.log(`
-字体 Metrics 提取工具 — 计算 PPT 单倍行距比率
+PPT-Font-Toolkit — Font Metrics
+
+计算 PPT 单倍行距比率
 
 用法:
-  node font-metrics.mjs <字体文件路径>          提取单个字体文件的 metrics
-  node font-metrics.mjs --dir <目录路径>        扫描指定目录
-  node font-metrics.mjs --scan                  扫描系统字体
-  node font-metrics.mjs --scan --filter <关键字> 按名称过滤
-  node font-metrics.mjs --scan --json           以 JSON 格式输出（数组）
-  node font-metrics.mjs --scan --json --map     以 JSON 格式输出（familyName 为 key 的 Map）
-  node font-metrics.mjs --scan --json --save <文件路径>  输出 JSON 并保存到文件
-  node font-metrics.mjs --scan --code           输出可直接使用的代码
+  node ppt-font-toolkit.mjs metrics <字体文件路径>
+  node ppt-font-toolkit.mjs metrics --dir <目录路径>
+  node ppt-font-toolkit.mjs metrics --scan
+  node ppt-font-metrics <字体文件路径>
+  node font-metrics.mjs <字体文件路径>   (兼容旧脚本名)
+
+参数示例:
+  --scan                  扫描系统字体
+  --filter <关键字>       按名称过滤
+  --json                  以 JSON 格式输出（数组）
+  --json --map            以 JSON 格式输出（familyName 为 key 的 Map）
+  --json --save <文件路径> 输出 JSON 并保存到文件
+  --code                  输出可直接使用的代码
 
 示例:
-  node font-metrics.mjs /Library/Fonts/msyh.ttf
-  node font-metrics.mjs --scan --filter "微软|Arial|Times|宋体|Courier"
+  node ppt-font-toolkit.mjs metrics /Library/Fonts/msyh.ttf
+  node ppt-font-metrics --scan --filter "微软|Arial|Times|宋体|Courier"
+  node ppt-font-metrics --scan --code
   node font-metrics.mjs --scan --code
 `)
 }
@@ -420,7 +429,7 @@ function main() {
 
   // 输出
   if (isCode) {
-    console.log('// PPT 字体单倍行距比率表')
+    console.log('// PPT-Font-Toolkit 字体单倍行距比率表')
     console.log('// lineRatio = (usWinAscent + usWinDescent) / unitsPerEm')
     console.log('// PPT行高(px) = fontSize(pt) × lineRatio × spcPct × 96/72')
     console.log('const FONT_LINE_RATIO: Record<string, number> = {')

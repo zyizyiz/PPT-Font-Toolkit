@@ -137,3 +137,14 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# macOS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Project outputs
+output.json
+recovered-fonts/
+recovered-wps-fonts/
+*-recovered-fonts/
