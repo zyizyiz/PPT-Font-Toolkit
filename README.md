@@ -92,6 +92,92 @@ node font-metrics.mjs --help
 
 ---
 
+## 后端集成
+
+### Node.js 后端：直接当库调用
+
+从 `1.2.0` 起（代码已支持，发布新版本后即可直接安装使用），包同时提供 CLI 和程序化 API。
+
+```js
+import {
+  buildMetricsMap,
+  extractFontMetrics,
+  listEmbeddedFonts,
+  recoverFonts,
+} from 'ppt-font-toolkit'
+
+try {
+  const { reports } = listEmbeddedFonts(
+    { sources: ['./demo.pptx'] },
+    {
+      onReport(report) {
+        console.log('list report:', report.sourceLabel)
+      },
+      onComplete(summary) {
+        console.log('list done:', summary.reports.length)
+      },
+    }
+  )
+
+  const { results } = recoverFonts(
+    { sources: ['./demo.pptx'], outputDir: './recovered-fonts' },
+    {
+      onRecovered(result) {
+        console.log('recovered:', result.output)
+      },
+      onComplete(summary) {
+        console.log('recover done:', summary.results.length)
+      },
+    }
+  )
+
+  const metrics = extractFontMetrics({
+    inputs: ['/Library/Fonts/Arial.ttf'],
+  })
+  const metricsMap = buildMetricsMap(metrics)
+
+  console.log(reports, results, metricsMap)
+} catch (error) {
+  console.error('failed:', error.message)
+}
+```
+
+约定如下：
+
+- 成功：函数直接返回结构化结果
+- 失败：函数抛出 `Error`
+- 回调：可选 `onEvent / onComplete`
+- `recover` 额外支持：`onRecovered / onReport / onTempDir`
+- `metrics` 额外支持：`onScanStart / onScanComplete / onSave`
+
+也可以按子路径导入：
+
+```js
+import { recoverEmbeddedFonts } from 'ppt-font-toolkit/recover'
+import { collectMetrics } from 'ppt-font-toolkit/metrics'
+```
+
+### Java / 其他后端：调用 CLI
+
+Java 后端不直接调用 Node SDK，推荐继续起子进程调用 CLI，并统一使用 `--json`：
+
+```bash
+ppt-font-recover ./demo.pptx --json
+ppt-font-recover ./demo.pptx --list --json
+ppt-font-metrics /Library/Fonts/Arial.ttf --json
+```
+
+约定如下：
+
+- 成功：退出码 `0`
+- 失败：退出码非 `0`
+- 结果：`stdout` 输出 JSON
+- 错误：`stderr` 输出错误信息
+
+如果你是 Java `ProcessBuilder` / Spring Boot 集成，这一层自己监听进程结束即可把它当“完成回调”。
+
+---
+
 ## 一键恢复 PPT 内嵌字体
 
 ### 推荐用法

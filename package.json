@@ -1,6 +1,6 @@
 {
   "name": "ppt-font-toolkit",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "中文优先的 PPT 字体工具箱：内嵌字体恢复 + 字体 Metrics 提取 / Chinese-first PPT font toolkit",
   "homepage": "https://github.com/zyizyiz/PPT-Font-Toolkit#readme",
   "bugs": {
@@ -13,6 +13,12 @@
   "license": "Apache-2.0",
   "author": "",
   "type": "module",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./recover": "./ppt-font-recover.mjs",
+    "./metrics": "./font-metrics.mjs"
+  },
   "bin": {
     "ppt-font-toolkit": "./ppt-font-toolkit.mjs",
     "ppt-font-recover": "./ppt-font-recover.mjs",
@@ -21,6 +27,7 @@
     "font-odttf-decrypt": "./odttf-decrypt.mjs"
   },
   "files": [
+    "index.mjs",
     "ppt-font-toolkit.mjs",
     "ppt-font-recover.mjs",
     "font-metrics.mjs",
@@ -54,7 +61,7 @@
     "recover:help": "node ppt-font-recover.mjs --help",
     "decrypt:help": "node odttf-decrypt.mjs --help",
     "metrics:help": "node ppt-font-toolkit.mjs metrics --help",
-    "package:check": "node ppt-font-toolkit.mjs --help && node ppt-font-recover.mjs --help && node font-metrics.mjs --help",
+    "package:check": "node ppt-font-toolkit.mjs --help && node ppt-font-recover.mjs --help && node font-metrics.mjs --help && node --input-type=module -e \"import('./index.mjs').then((mod) => console.log(Object.keys(mod).length))\"",
     "test": "echo \"No tests specified\""
   }
 }

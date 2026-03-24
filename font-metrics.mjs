@@ -20,6 +20,7 @@
 import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'fs'
 import { join, extname, resolve } from 'path'
 import { platform } from 'os'
+import { fileURLToPath } from 'url'
 
 // ============================================================
 // 核心：从字体文件二进制中提取 metrics（不依赖第三方库）
@@ -30,7 +31,7 @@ import { platform } from 'os'
  * @param {string} fontPath 字体文件路径
  * @returns {{ familyName: string, usWinAscent: number, usWinDescent: number, unitsPerEm: number, lineRatio: number } | null}
  */
-function getFontMetrics(fontPath) {
+export function getFontMetrics(fontPath) {
   try {
     const buffer = readFileSync(fontPath)
     const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength)
@@ -258,7 +259,7 @@ function extractFontName(view, nameOffset, nameLength) {
 // 系统字体目录扫描
 // ============================================================
 
-function getSystemFontDirs() {
+export function getSystemFontDirs() {
   const os = platform()
   
   if (os === 'darwin') {
@@ -287,7 +288,7 @@ function getSystemFontDirs() {
 
 const FONT_EXTENSIONS = new Set(['.ttf', '.otf', '.ttc', '.woff'])
 
-function scanFontFiles(dir) {
+export function scanFontFiles(dir) {
   const fonts = []
   
   if (!existsSync(dir)) return fonts
@@ -349,51 +350,224 @@ PPT-Font-Toolkit — Font Metrics
 `)
 }
 
-function main() {
-  const args = process.argv.slice(2)
+function readNextArg(argv, index, flagName) {
+  const value = argv[index]
+  if (!value) {
+    throw new Error(`${flagName} 缺少参数`)
+  }
+  return value
+}
 
-  if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
-    printUsage()
-    process.exit(0)
+function emitMetricsEvent(callbacks, type, payload = {}) {
+  const event = { type, ...payload }
+
+  if (typeof callbacks.onEvent === 'function') {
+    callbacks.onEvent(event)
   }
 
-  const isJson = args.includes('--json')
-  const isCode = args.includes('--code')
-  const isMap = args.includes('--map')
-  const isScan = args.includes('--scan')
-  const saveIdx = args.indexOf('--save')
-  const savePath = saveIdx >= 0 ? args[saveIdx + 1] : null
-  const filterIdx = args.indexOf('--filter')
-  const filterPattern = filterIdx >= 0 ? args[filterIdx + 1] : null
-  const dirIdx = args.indexOf('--dir')
-  const dirPath = dirIdx >= 0 ? args[dirIdx + 1] : null
+  if (type === 'scanStart' && typeof callbacks.onScanStart === 'function') {
+    callbacks.onScanStart(event)
+  } else if (type === 'scanComplete' && typeof callbacks.onScanComplete === 'function') {
+    callbacks.onScanComplete(event)
+  } else if (type === 'save' && typeof callbacks.onSave === 'function') {
+    callbacks.onSave(event)
+  } else if (type === 'complete' && typeof callbacks.onComplete === 'function') {
+    callbacks.onComplete(event)
+  }
+}
 
+export function parseMetricsArgs(argv = process.argv.slice(2)) {
+  const options = {
+    help: false,
+    json: false,
+    code: false,
+    map: false,
+    scan: false,
+    savePath: null,
+    filter: null,
+    dir: null,
+    inputs: [],
+  }
+
+  for (let index = 0; index < argv.length; index++) {
+    const arg = argv[index]
+
+    if (arg === '--help' || arg === '-h') {
+      options.help = true
+    } else if (arg === '--json') {
+      options.json = true
+    } else if (arg === '--code') {
+      options.code = true
+    } else if (arg === '--map') {
+      options.map = true
+    } else if (arg === '--scan') {
+      options.scan = true
+    } else if (arg === '--save') {
+      options.savePath = readNextArg(argv, ++index, '--save')
+    } else if (arg === '--filter') {
+      options.filter = readNextArg(argv, ++index, '--filter')
+    } else if (arg === '--dir') {
+      options.dir = readNextArg(argv, ++index, '--dir')
+    } else if (!arg.startsWith('-')) {
+      options.inputs.push(arg)
+    } else {
+      throw new Error(`未知参数: ${arg}`)
+    }
+  }
+
+  return options
+}
+
+function normalizeMetricsOptions(options = {}) {
+  const rawInputs = []
+
+  const appendValues = (value) => {
+    if (Array.isArray(value)) {
+      for (const item of value) appendValues(item)
+      return
+    }
+    if (value !== undefined && value !== null && value !== '') {
+      rawInputs.push(String(value))
+    }
+  }
+
+  appendValues(options.inputs)
+  appendValues(options.files)
+  appendValues(options.fontFiles)
+  appendValues(options.paths)
+  appendValues(options.input)
+
+  return {
+    help: Boolean(options.help),
+    json: Boolean(options.json),
+    code: Boolean(options.code),
+    map: Boolean(options.map),
+    scan: Boolean(options.scan),
+    savePath: options.savePath || options.save || null,
+    filter: options.filter || null,
+    dir: options.dir || options.directory || null,
+    inputs: rawInputs,
+  }
+}
+
+function dedupeMetricsResults(results) {
+  const seen = new Map()
+  for (const result of results) {
+    const key = result.familyName || result.path
+    if (!seen.has(key)) {
+      seen.set(key, result)
+    }
+  }
+  return Array.from(seen.values())
+}
+
+export function buildMetricsJsonOutput(results) {
+  return results.map((result) => {
+    const entry = {
+      familyName: result.familyName,
+      usWinAscent: result.usWinAscent,
+      usWinDescent: result.usWinDescent,
+      unitsPerEm: result.unitsPerEm,
+      lineRatio: result.lineRatio,
+    }
+    if (result.familyNameEn && result.familyNameEn !== result.familyName) {
+      entry.familyNameEn = result.familyNameEn
+    }
+    return entry
+  })
+}
+
+export function buildMetricsMap(results) {
+  const output = {}
+  for (const result of results) {
+    if (!result.familyName) continue
+    const entry = {
+      usWinAscent: result.usWinAscent,
+      usWinDescent: result.usWinDescent,
+      unitsPerEm: result.unitsPerEm,
+      lineRatio: result.lineRatio,
+    }
+    if (result.familyNameEn && result.familyNameEn !== result.familyName) {
+      entry.familyNameEn = result.familyNameEn
+    }
+    output[result.familyName] = entry
+  }
+  return output
+}
+
+export function formatMetricsCode(results) {
+  const lines = [
+    '// PPT-Font-Toolkit 字体单倍行距比率表',
+    '// lineRatio = (usWinAscent + usWinDescent) / unitsPerEm',
+    '// PPT行高(px) = fontSize(pt) × lineRatio × spcPct × 96/72',
+    'const FONT_LINE_RATIO: Record<string, number> = {',
+  ]
+
+  for (const result of results) {
+    if (!result.familyName) continue
+    const enInfo = result.familyNameEn && result.familyNameEn !== result.familyName ? ` [${result.familyNameEn}]` : ''
+    lines.push(`  '${result.familyName}': ${result.lineRatio},  // ascent=${result.usWinAscent} descent=${result.usWinDescent} em=${result.unitsPerEm}${enInfo}`)
+  }
+
+  lines.push('}')
+  lines.push('')
+  lines.push('const DEFAULT_LINE_RATIO = 1.2')
+  return lines.join('\n')
+}
+
+export function formatMetricsTable(results) {
+  const displayNames = results.map((result) => {
+    if (result.familyNameEn && result.familyNameEn !== result.familyName) {
+      return `${result.familyName} (${result.familyNameEn})`
+    }
+    return result.familyName
+  })
+
+  const maxName = Math.max(12, ...displayNames.map((name) => name.length))
+  const header = [
+    '字体名称'.padEnd(maxName),
+    'Ascent'.padStart(8),
+    'Descent'.padStart(8),
+    'EmSize'.padStart(8),
+    'LineRatio'.padStart(10),
+  ].join('  ')
+
+  const lines = [header, '-'.repeat(header.length)]
+  for (let index = 0; index < results.length; index++) {
+    const result = results[index]
+    lines.push([
+      displayNames[index].padEnd(maxName),
+      String(result.usWinAscent).padStart(8),
+      String(result.usWinDescent).padStart(8),
+      String(result.unitsPerEm).padStart(8),
+      String(result.lineRatio).padStart(10),
+    ].join('  '))
+  }
+
+  lines.push(`\n共 ${results.length} 个字体`)
+  return lines.join('\n')
+}
+
+export function collectMetrics(options = {}, callbacks = {}) {
+  const normalized = normalizeMetricsOptions(options)
   let fontFiles = []
 
-  if (isScan) {
-    // 扫描系统字体
+  if (normalized.scan) {
     const dirs = getSystemFontDirs()
-    console.error(`扫描系统字体目录: ${dirs.join(', ')}`)
+    emitMetricsEvent(callbacks, 'scanStart', { mode: 'system', directories: dirs })
     for (const dir of dirs) {
       fontFiles.push(...scanFontFiles(dir))
     }
-    console.error(`找到 ${fontFiles.length} 个字体文件\n`)
-  } else if (dirPath) {
-    // 扫描指定目录
-    const absDir = resolve(dirPath)
-    console.error(`扫描目录: ${absDir}`)
+    emitMetricsEvent(callbacks, 'scanComplete', { mode: 'system', directories: dirs, count: fontFiles.length })
+  } else if (normalized.dir) {
+    const absDir = resolve(normalized.dir)
+    emitMetricsEvent(callbacks, 'scanStart', { mode: 'directory', directory: absDir })
     fontFiles = scanFontFiles(absDir)
-    console.error(`找到 ${fontFiles.length} 个字体文件\n`)
+    emitMetricsEvent(callbacks, 'scanComplete', { mode: 'directory', directory: absDir, count: fontFiles.length })
   } else {
-    // 处理指定的字体文件
-    for (const arg of args) {
-      if (!arg.startsWith('-')) {
-        fontFiles.push(resolve(arg))
-      }
-    }
+    fontFiles = normalized.inputs.map((input) => resolve(input))
   }
 
-  // 提取 metrics
   const allResults = []
   for (const file of fontFiles) {
     const results = getFontMetrics(file)
@@ -402,124 +576,93 @@ function main() {
     }
   }
 
-  // 按名称过滤（同时匹配中文名、英文名、文件路径）
   let filtered = allResults
-  if (filterPattern) {
-    const regex = new RegExp(filterPattern, 'i')
-    filtered = allResults.filter(r => 
-      regex.test(r.familyName) || regex.test(r.familyNameEn) || regex.test(r.path)
+  if (normalized.filter) {
+    const regex = new RegExp(normalized.filter, 'i')
+    filtered = allResults.filter((result) =>
+      regex.test(result.familyName) || regex.test(result.familyNameEn) || regex.test(result.path)
     )
   }
 
-  // 去重（同名字体保留第一个）
-  const seen = new Map()
-  for (const r of filtered) {
-    const key = r.familyName || r.path
-    if (!seen.has(key)) {
-      seen.set(key, r)
-    }
-  }
-  filtered = Array.from(seen.values())
-
-  // 按名称排序
-  filtered.sort((a, b) => a.familyName.localeCompare(b.familyName))
+  filtered = dedupeMetricsResults(filtered)
+  filtered.sort((left, right) => left.familyName.localeCompare(right.familyName))
 
   if (filtered.length === 0) {
-    console.error('未找到匹配的字体')
-    process.exit(1)
+    throw new Error('未找到匹配的字体')
   }
 
-  // 输出
-  if (isCode) {
-    console.log('// PPT-Font-Toolkit 字体单倍行距比率表')
-    console.log('// lineRatio = (usWinAscent + usWinDescent) / unitsPerEm')
-    console.log('// PPT行高(px) = fontSize(pt) × lineRatio × spcPct × 96/72')
-    console.log('const FONT_LINE_RATIO: Record<string, number> = {')
-    for (const r of filtered) {
-      if (r.familyName) {
-        const enInfo = r.familyNameEn && r.familyNameEn !== r.familyName ? ` [${r.familyNameEn}]` : ''
-        console.log(`  '${r.familyName}': ${r.lineRatio},  // ascent=${r.usWinAscent} descent=${r.usWinDescent} em=${r.unitsPerEm}${enInfo}`)
-      }
+  return filtered
+}
+
+export function runMetrics(options = {}, callbacks = {}) {
+  const normalized = normalizeMetricsOptions(options)
+  const results = collectMetrics(normalized, callbacks)
+
+  let format = 'array'
+  let output = buildMetricsJsonOutput(results)
+  let savedTo = null
+
+  if (normalized.code) {
+    format = 'code'
+    output = formatMetricsCode(results)
+  } else if (normalized.map) {
+    format = 'map'
+    output = buildMetricsMap(results)
+  }
+
+  if (!normalized.code && normalized.savePath) {
+    savedTo = resolve(normalized.savePath)
+    writeFileSync(savedTo, JSON.stringify(output, null, 2) + '\n', 'utf-8')
+    emitMetricsEvent(callbacks, 'save', { path: savedTo, format })
+  }
+
+  const summary = { format, results, output, savedTo }
+  emitMetricsEvent(callbacks, 'complete', summary)
+  return summary
+}
+
+export function main(argv = process.argv.slice(2)) {
+  try {
+    const options = parseMetricsArgs(argv)
+
+    if (options.help || argv.length === 0) {
+      printUsage()
+      return 0
     }
-    console.log('}')
-    console.log('')
-    console.log('const DEFAULT_LINE_RATIO = 1.2')
-  } else if (isJson) {
-    let output
-    if (isMap) {
-      // 以 familyName 为 key 生成 Map 对象
-      output = {}
-      for (const r of filtered) {
-        if (r.familyName) {
-          const entry = {
-            usWinAscent: r.usWinAscent,
-            usWinDescent: r.usWinDescent,
-            unitsPerEm: r.unitsPerEm,
-            lineRatio: r.lineRatio,
-          }
-          if (r.familyNameEn && r.familyNameEn !== r.familyName) {
-            entry.familyNameEn = r.familyNameEn
-          }
-          output[r.familyName] = entry
+
+    const summary = runMetrics(options, {
+      onScanStart(event) {
+        if (event.mode === 'system') {
+          console.error(`扫描系统字体目录: ${event.directories.join(', ')}`)
+        } else if (event.directory) {
+          console.error(`扫描目录: ${event.directory}`)
         }
-      }
-    } else {
-      output = filtered.map(r => {
-        const entry = {
-          familyName: r.familyName,
-          usWinAscent: r.usWinAscent,
-          usWinDescent: r.usWinDescent,
-          unitsPerEm: r.unitsPerEm,
-          lineRatio: r.lineRatio,
-        }
-        if (r.familyNameEn && r.familyNameEn !== r.familyName) {
-          entry.familyNameEn = r.familyNameEn
-        }
-        return entry
-      })
-    }
-    const jsonStr = JSON.stringify(output, null, 2)
-    if (savePath) {
-      const absPath = resolve(savePath)
-      writeFileSync(absPath, jsonStr + '\n', 'utf-8')
-      console.error(`已保存到: ${absPath}`)
-    } else {
-      console.log(jsonStr)
-    }
-  } else {
-    // 表格输出
-    // 生成显示名称，包含英文名（如有）
-    const displayNames = filtered.map(r => {
-      if (r.familyNameEn && r.familyNameEn !== r.familyName) {
-        return `${r.familyName} (${r.familyNameEn})`
-      }
-      return r.familyName
+      },
+      onScanComplete(event) {
+        console.error(`找到 ${event.count} 个字体文件\n`)
+      },
+      onSave(event) {
+        console.error(`已保存到: ${event.path}`)
+      },
     })
-    const maxName = Math.max(12, ...displayNames.map(n => n.length))
-    const header = [
-      '字体名称'.padEnd(maxName),
-      'Ascent'.padStart(8),
-      'Descent'.padStart(8),
-      'EmSize'.padStart(8),
-      'LineRatio'.padStart(10),
-    ].join('  ')
-    
-    console.log(header)
-    console.log('-'.repeat(header.length))
-    
-    for (let i = 0; i < filtered.length; i++) {
-      const r = filtered[i]
-      console.log([
-        displayNames[i].padEnd(maxName),
-        String(r.usWinAscent).padStart(8),
-        String(r.usWinDescent).padStart(8),
-        String(r.unitsPerEm).padStart(8),
-        String(r.lineRatio).padStart(10),
-      ].join('  '))
+
+    if (summary.format === 'code') {
+      console.log(summary.output)
+    } else if (options.json) {
+      if (!summary.savedTo) {
+        console.log(JSON.stringify(summary.output, null, 2))
+      }
+    } else {
+      console.log(formatMetricsTable(summary.results))
     }
-    
-    console.log(`\n共 ${filtered.length} 个字体`)
+
+    return 0
+  } catch (error) {
+    console.error(error.message)
+    return 1
   }
 }
 
-main()
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  process.exit(main())
+}

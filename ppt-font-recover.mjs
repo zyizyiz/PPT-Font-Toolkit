@@ -79,7 +79,7 @@ source 可以是:
 `)
 }
 
-function parseArgs(argv) {
+export function parseRecoverArgs(argv) {
   const options = {
     sources: [],
     fontRefs: [],
@@ -217,7 +217,7 @@ function parseWpsEotMetadata(buffer) {
   }
 }
 
-function inspectEmbeddedFontFile(inputPath) {
+export function inspectEmbeddedFontFile(inputPath) {
   const absoluteInput = resolve(inputPath)
   if (!existsSync(absoluteInput)) {
     throw new Error(`找不到输入文件: ${absoluteInput}`)
@@ -777,7 +777,7 @@ function printListReport(report, showTitle = false) {
     item.style || '-',
     item.rId || '-',
     item.target || '-',
-    item.methodLabel || '-',
+    item.methodLabel || item.method || '-',
     item.fontKey || '-',
   ])
 
@@ -787,7 +787,7 @@ function printListReport(report, showTitle = false) {
 function printRecoveryResults(results) {
   for (const result of results) {
     const typeface = result.typeface || basename(result.output, extname(result.output))
-    console.log(`✅ [${result.methodLabel}] ${typeface} -> ${result.output}`)
+    console.log(`✅ [${result.methodLabel || result.method}] ${typeface} -> ${result.output}`)
   }
 }
 
@@ -795,91 +795,178 @@ function isDirectRun() {
   return process.argv[1] && resolve(process.argv[1]) === SCRIPT_PATH
 }
 
-export function main(argv = process.argv.slice(2)) {
-  const temporaryPaths = []
-  let keepTemp = false
+function emitRecoverEvent(callbacks, type, payload = {}) {
+  const event = { type, ...payload }
 
-  try {
-    const options = parseArgs(argv)
-    keepTemp = options.keepTemp
+  if (typeof callbacks.onEvent === 'function') {
+    callbacks.onEvent(event)
+  }
 
-    if (options.help || options.sources.length === 0) {
-      printUsage()
-      return 0
+  if (type === 'tempDir' && typeof callbacks.onTempDir === 'function') {
+    callbacks.onTempDir(event)
+  } else if (type === 'report' && typeof callbacks.onReport === 'function') {
+    callbacks.onReport(event)
+  } else if (type === 'recovered' && typeof callbacks.onRecovered === 'function') {
+    callbacks.onRecovered(event)
+  } else if (type === 'complete' && typeof callbacks.onComplete === 'function') {
+    callbacks.onComplete(event)
+  }
+}
+
+function normalizeRecoverOptions(options = {}) {
+  const rawSources = []
+  const rawFontRefs = []
+
+  const appendValues = (target, value) => {
+    if (Array.isArray(value)) {
+      for (const item of value) appendValues(target, item)
+      return
     }
-
-    const rawSources = dedupeSources(options.sources.flatMap((source) => collectInputEntries(source)))
-    if (!rawSources.length) {
-      throw new Error('没有找到可处理的 .pptx / package / .fntdata 输入')
+    if (value !== undefined && value !== null && value !== '') {
+      target.push(String(value))
     }
+  }
 
-    const resolvedSources = rawSources.map((source) => {
-      if (source.kind !== 'archive') {
-        return {
-          ...source,
-          workingPath: source.originalPath,
-        }
-      }
+  appendValues(rawSources, options.sources)
+  appendValues(rawSources, options.inputs)
+  appendValues(rawSources, options.source)
+  appendValues(rawSources, options.input)
 
-      const extracted = extractArchiveToTemp(source.originalPath)
-      temporaryPaths.push(extracted.cleanupPath)
+  appendValues(rawFontRefs, options.fontRefs)
+  appendValues(rawFontRefs, options.fonts)
+  appendValues(rawFontRefs, options.font)
+
+  return {
+    sources: rawSources,
+    fontRefs: rawFontRefs.flatMap((value) => splitMultiValue(value)),
+    output: options.output || null,
+    outputDir: options.outputDir || null,
+    key: options.key || null,
+    list: Boolean(options.list),
+    json: Boolean(options.json),
+    keepTemp: Boolean(options.keepTemp),
+    help: Boolean(options.help),
+  }
+}
+
+function cleanupTemporaryPaths(temporaryPaths) {
+  for (const tempPath of temporaryPaths) {
+    try {
+      rmSync(tempPath, { recursive: true, force: true })
+    } catch {
+      // ignore cleanup failures
+    }
+  }
+}
+
+function resolveRecoverSources(options, temporaryPaths, callbacks) {
+  const rawSources = dedupeSources(options.sources.flatMap((source) => collectInputEntries(source)))
+  if (!rawSources.length) {
+    throw new Error('没有找到可处理的 .pptx / package / .fntdata 输入')
+  }
+
+  return rawSources.map((source) => {
+    if (source.kind !== 'archive') {
       return {
         ...source,
-        workingPath: extracted.packagePath,
-        extractedPath: extracted.packagePath,
+        workingPath: source.originalPath,
       }
-    })
-
-    if (options.list) {
-      const reports = []
-      for (const source of resolvedSources) {
-        if (source.kind === 'package' || source.kind === 'archive') {
-          const mappings = readPptFontMappings(source.workingPath)
-          reports.push({
-            sourceLabel: source.label,
-            rows: filterMappings(mappings, options.fontRefs),
-          })
-        } else {
-          reports.push({
-            sourceLabel: source.label,
-            rows: [buildSingleFileTask(source, { ...options, key: options.key || null }, true)],
-          })
-        }
-      }
-
-      if (options.json) {
-        const output = reports.map((report) => ({
-          sourceLabel: report.sourceLabel,
-          rows: report.rows.map((item) => ({
-            typeface: item.typeface || '',
-            style: item.style || '',
-            rId: item.rId || '',
-            target: item.target || '',
-            method: item.methodLabel || '',
-            fontKey: item.fontKey || '',
-            inputPath: item.inputPath || '',
-          })),
-        }))
-        console.log(JSON.stringify(output, null, 2))
-      } else {
-        for (let index = 0; index < reports.length; index++) {
-          if (index > 0) console.log('')
-          printListReport(reports[index], reports.length > 1)
-        }
-      }
-
-      if (options.keepTemp && temporaryPaths.length) {
-        console.error(`已保留临时解压目录: ${temporaryPaths.join(', ')}`)
-      }
-      return 0
     }
+
+    const extracted = extractArchiveToTemp(source.originalPath)
+    temporaryPaths.push(extracted.cleanupPath)
+    emitRecoverEvent(callbacks, 'tempDir', {
+      sourceLabel: source.label,
+      sourcePath: source.originalPath,
+      path: extracted.cleanupPath,
+      packagePath: extracted.packagePath,
+    })
+    return {
+      ...source,
+      workingPath: extracted.packagePath,
+      extractedPath: extracted.packagePath,
+    }
+  })
+}
+
+function createListReports(resolvedSources, options) {
+  const reports = []
+
+  for (const source of resolvedSources) {
+    if (source.kind === 'package' || source.kind === 'archive') {
+      const mappings = readPptFontMappings(source.workingPath)
+      reports.push({
+        sourceLabel: source.label,
+        rows: filterMappings(mappings, options.fontRefs).map((item) => ({
+          typeface: item.typeface || '',
+          style: item.style || '',
+          rId: item.rId || '',
+          target: item.target || '',
+          method: item.methodLabel || '',
+          methodLabel: item.methodLabel || '',
+          fontKey: item.fontKey || '',
+          inputPath: item.inputPath || '',
+        })),
+      })
+    } else {
+      const item = buildSingleFileTask(source, { ...options, key: options.key || null }, true)
+      reports.push({
+        sourceLabel: source.label,
+        rows: [{
+          typeface: item.typeface || '',
+          style: item.style || '',
+          rId: item.rId || '',
+          target: item.target || '',
+          method: item.methodLabel || '',
+          methodLabel: item.methodLabel || '',
+          fontKey: item.fontKey || '',
+          inputPath: item.inputPath || '',
+        }],
+      })
+    }
+  }
+
+  return reports
+}
+
+export function listEmbeddedFonts(options = {}, callbacks = {}) {
+  const normalized = normalizeRecoverOptions(options)
+  const temporaryPaths = []
+
+  try {
+    const resolvedSources = resolveRecoverSources(normalized, temporaryPaths, callbacks)
+    const reports = createListReports(resolvedSources, normalized)
+
+    for (const report of reports) {
+      emitRecoverEvent(callbacks, 'report', report)
+    }
+
+    const summary = {
+      reports,
+      temporaryPaths: [...temporaryPaths],
+    }
+    emitRecoverEvent(callbacks, 'complete', { mode: 'list', ...summary })
+    return summary
+  } finally {
+    if (!normalized.keepTemp) {
+      cleanupTemporaryPaths(temporaryPaths)
+    }
+  }
+}
+
+export function recoverEmbeddedFonts(options = {}, callbacks = {}) {
+  const normalized = normalizeRecoverOptions(options)
+  const temporaryPaths = []
+
+  try {
+    const resolvedSources = resolveRecoverSources(normalized, temporaryPaths, callbacks)
 
     const tasks = []
     for (const source of resolvedSources) {
       if (source.kind === 'package' || source.kind === 'archive') {
-        tasks.push(...buildPackageTasks(source, options))
+        tasks.push(...buildPackageTasks(source, normalized))
       } else {
-        tasks.push(buildSingleFileTask(source, options))
+        tasks.push(buildSingleFileTask(source, normalized))
       }
     }
 
@@ -887,7 +974,7 @@ export function main(argv = process.argv.slice(2)) {
       throw new Error('没有匹配到可恢复的内嵌字体')
     }
 
-    if (options.output && tasks.length !== 1) {
+    if (normalized.output && tasks.length !== 1) {
       throw new Error('--output 只能用于单个恢复任务；批量模式请使用 --output-dir')
     }
 
@@ -895,9 +982,9 @@ export function main(argv = process.argv.slice(2)) {
     for (const task of tasks) {
       const buffer = recoverTaskBuffer(task)
       const matchingSource = resolvedSources.find((source) => normalizeFsPath(source.originalPath) === normalizeFsPath(task.sourcePath))
-      const outputDir = resolveSourceOutputDir(matchingSource, options, resolvedSources.length)
-      const outputPath = writeRecoveredTask(task, buffer, options.output, outputDir)
-      results.push({
+      const outputDir = resolveSourceOutputDir(matchingSource, normalized, resolvedSources.length)
+      const outputPath = writeRecoveredTask(task, buffer, normalized.output, outputDir)
+      const result = {
         sourceLabel: task.sourceLabel,
         inputPath: task.inputPath,
         output: outputPath,
@@ -908,32 +995,73 @@ export function main(argv = process.argv.slice(2)) {
         fontKey: task.fontKey || '',
         methodLabel: task.methodLabel,
         format: detectFontOutputExtension(buffer).slice(1),
-      })
+      }
+      results.push(result)
+      emitRecoverEvent(callbacks, 'recovered', result)
     }
 
+    const summary = {
+      results,
+      temporaryPaths: [...temporaryPaths],
+    }
+    emitRecoverEvent(callbacks, 'complete', { mode: 'recover', ...summary })
+    return summary
+  } finally {
+    if (!normalized.keepTemp) {
+      cleanupTemporaryPaths(temporaryPaths)
+    }
+  }
+}
+
+export function runRecover(options = {}, callbacks = {}) {
+  const normalized = normalizeRecoverOptions(options)
+  if (normalized.list) {
+    return { mode: 'list', ...listEmbeddedFonts(normalized, callbacks) }
+  }
+  return { mode: 'recover', ...recoverEmbeddedFonts(normalized, callbacks) }
+}
+
+export function main(argv = process.argv.slice(2)) {
+  try {
+    const options = parseRecoverArgs(argv)
+
+    if (options.help || options.sources.length === 0) {
+      printUsage()
+      return 0
+    }
+
+    if (options.list) {
+      const { reports, temporaryPaths: keptPaths } = listEmbeddedFonts(options)
+      if (options.json) {
+        console.log(JSON.stringify(reports, null, 2))
+      } else {
+        for (let index = 0; index < reports.length; index++) {
+          if (index > 0) console.log('')
+          printListReport(reports[index], reports.length > 1)
+        }
+      }
+
+      if (options.keepTemp && keptPaths.length) {
+        console.error(`已保留临时解压目录: ${keptPaths.join(', ')}`)
+      }
+      return 0
+    }
+
+    const { results, temporaryPaths: keptPaths } = recoverEmbeddedFonts(options)
     if (options.json) {
       console.log(JSON.stringify(results, null, 2))
     } else {
       printRecoveryResults(results)
-      if (options.keepTemp && temporaryPaths.length) {
-        console.error(`已保留临时解压目录: ${temporaryPaths.join(', ')}`)
-      }
+    }
+
+    if (options.keepTemp && keptPaths.length) {
+      console.error(`已保留临时解压目录: ${keptPaths.join(', ')}`)
     }
 
     return 0
   } catch (error) {
     console.error(`❌ ${error.message}`)
     return 1
-  } finally {
-    if (!keepTemp) {
-      for (const tempPath of temporaryPaths) {
-        try {
-          rmSync(tempPath, { recursive: true, force: true })
-        } catch {
-          // ignore cleanup failures
-        }
-      }
-    }
   }
 }
 
