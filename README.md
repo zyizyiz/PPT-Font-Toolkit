@@ -40,6 +40,40 @@
 
 ---
 
+## npm 安装
+
+发布到 npm 后，可以这样安装和使用：
+
+### 全局安装
+
+```bash
+npm install -g ppt-font-toolkit
+
+ppt-font-toolkit --help
+ppt-font-recover --help
+ppt-font-metrics --help
+```
+
+### 直接用 `npx`
+
+```bash
+npx ppt-font-toolkit --help
+npx ppt-font-recover ./demo.pptx
+npx ppt-font-metrics --scan --json
+```
+
+### 本地开发联调
+
+```bash
+npm link
+
+ppt-font-toolkit --help
+ppt-font-recover --help
+ppt-font-metrics --help
+```
+
+---
+
 ## 快速开始
 
 ```bash
@@ -324,7 +358,27 @@ node odttf-decrypt.mjs ./demo.pptx
   - macOS / Linux: `unzip`
   - Windows: `PowerShell Expand-Archive`
 
-### Quick start
+### Install from npm
+
+After publishing to npm, you can install and run it like this:
+
+```bash
+npm install -g ppt-font-toolkit
+
+ppt-font-toolkit --help
+ppt-font-recover --help
+ppt-font-metrics --help
+```
+
+Or use `npx` without a global install:
+
+```bash
+npx ppt-font-toolkit --help
+npx ppt-font-recover ./demo.pptx
+npx ppt-font-metrics --scan --json
+```
+
+### Quick start from source
 
 ```bash
 git clone https://github.com/zyizyiz/PPT-Font-Toolkit.git

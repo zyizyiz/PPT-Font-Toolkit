@@ -13,7 +13,6 @@
   "license": "Apache-2.0",
   "author": "",
   "type": "module",
-  "main": "./ppt-font-toolkit.mjs",
   "bin": {
     "ppt-font-toolkit": "./ppt-font-toolkit.mjs",
     "ppt-font-recover": "./ppt-font-recover.mjs",
@@ -55,6 +54,7 @@
     "recover:help": "node ppt-font-recover.mjs --help",
     "decrypt:help": "node odttf-decrypt.mjs --help",
     "metrics:help": "node ppt-font-toolkit.mjs metrics --help",
+    "package:check": "node ppt-font-toolkit.mjs --help && node ppt-font-recover.mjs --help && node font-metrics.mjs --help",
     "test": "echo \"No tests specified\""
   }
 }
